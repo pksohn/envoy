@@ -11,6 +11,7 @@
 #include "source/common/http/header_utility.h"
 #include "source/common/quic/envoy_quic_server_session.h"
 #include "source/common/quic/envoy_quic_utils.h"
+#include "source/common/quic/quic_stats_gatherer.h"
 
 #include "quiche/quic/core/http/quic_header_list.h"
 #include "quiche/quic/core/quic_session.h"
@@ -36,6 +37,8 @@ EnvoyQuicServerStream::EnvoyQuicServerStream(
       headers_with_underscores_action_(headers_with_underscores_action) {
   ASSERT(static_cast<uint32_t>(GetReceiveWindow().value()) > 8 * 1024,
          "Send buffer limit should be larger than 8KB.");
+  stats_gatherer_ = new QuicStatsGatherer(bytesMeter());
+  set_ack_listener(stats_gatherer_);
 }
 
 void EnvoyQuicServerStream::encode1xxHeaders(const Http::ResponseHeaderMap& headers) {

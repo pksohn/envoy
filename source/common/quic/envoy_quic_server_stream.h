@@ -1,6 +1,7 @@
 #pragma once
 
 #include "source/common/quic/envoy_quic_stream.h"
+#include "source/common/quic/quic_stats_gatherer.h"
 
 #include "quiche/quic/core/http/quic_spdy_server_stream_base.h"
 
@@ -85,6 +86,8 @@ private:
   Http::RequestDecoder* request_decoder_{nullptr};
   envoy::config::core::v3::HttpProtocolOptions::HeadersWithUnderscoresAction
       headers_with_underscores_action_;
+
+  quiche::QuicheReferenceCountedPointer<QuicStatsGatherer> stats_gatherer_;
 };
 
 } // namespace Quic
