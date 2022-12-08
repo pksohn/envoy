@@ -11,6 +11,7 @@
 #include "source/server/active_listener_base.h"
 
 #include "test/common/quic/test_utils.h"
+#include "test/mocks/access_log/mocks.h"
 #include "test/mocks/http/mocks.h"
 #include "test/mocks/http/stream_decoder.h"
 #include "test/mocks/network/mocks.h"
@@ -99,6 +100,16 @@ public:
                   SendConnectionClosePacket(_, quic::NO_IETF_QUIC_ERROR, "Closed by application"));
       quic_session_.close(Network::ConnectionCloseType::NoFlush);
     }
+  }
+
+  void setStatsGathererDetails(std::list<AccessLog::InstanceSharedPtr> access_loggers,
+                               std::shared_ptr<StreamInfo::StreamInfo> stream_info) {
+    quic_stream_->stats_gatherer_->setAccessLogHandlers(access_loggers);
+    quic_stream_->stats_gatherer_->setStreamInfo(stream_info);
+  }
+
+  uint64_t statsGathererBytesOutstanding() {
+    return quic_stream_->stats_gatherer_->bytesOutstanding();
   }
 
   size_t receiveRequest(const std::string& payload, bool fin,
@@ -751,6 +762,29 @@ TEST_F(EnvoyQuicServerStreamTest, ConnectionCloseAfterEndStreamEncoded) {
           }));
   EXPECT_CALL(quic_session_, MaybeSendRstStreamFrame(_, _, _));
   quic_stream_->encodeHeaders(response_headers_, /*end_stream=*/true);
+}
+
+// Tests that when stream is cleaned up, QuicStatsGatherer executes any pending logs.
+TEST_F(EnvoyQuicServerStreamTest, StatsGathererLogsOnStreamDestruction) {
+
+  std::shared_ptr<AccessLog::MockInstance> mock_logger(new NiceMock<AccessLog::MockInstance>());
+  std::list<AccessLog::InstanceSharedPtr> loggers = {mock_logger};
+  std::shared_ptr<Envoy::StreamInfo::StreamInfo> stream_info(
+      new NiceMock<Envoy::StreamInfo::MockStreamInfo>());
+
+  setStatsGathererDetails(loggers, stream_info);
+  // TODO: set headers and pointers too.
+
+  receiveRequest(request_body_, false, request_body_.size() * 2);
+  quic_stream_->encodeHeaders(response_headers_, /*end_stream=*/true);
+  EXPECT_CALL(quic_session_, MaybeSendStopSendingFrame(_, _));
+  EXPECT_CALL(stream_callbacks_, onResetStream(Http::StreamResetReason::LocalReset, _));
+  // The stats gatherer has outstanding bytes that have not been acked.
+  EXPECT_GT(statsGathererBytesOutstanding(), 0);
+  // Close the stream; incoming acks will no longer invoke the stats gatherer but
+  // the stats gatherer should log on stream close.
+  EXPECT_CALL(*mock_logger, log(_, _, _, _));
+  quic_stream_->resetStream(Http::StreamResetReason::LocalRefusedStreamReset);
 }
 
 TEST_F(EnvoyQuicServerStreamTest, MetadataNotSupported) {
