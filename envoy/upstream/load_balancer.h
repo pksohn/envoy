@@ -49,7 +49,7 @@ public:
    * @return const Http::HeaderMap* the incoming headers or nullptr to use during load
    * balancing.
    */
-  virtual const Http::RequestHeaderMap* downstreamHeaders() const PURE;
+  virtual const Http::RequestHeaderMapSharedPtr downstreamHeaders() const PURE;
 
   /**
    * Called to retrieve a reference to the priority load data that should be used when selecting a

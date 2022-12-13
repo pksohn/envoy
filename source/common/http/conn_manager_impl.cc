@@ -1116,7 +1116,7 @@ void ConnectionManagerImpl::ActiveStream::decodeHeaders(RequestHeaderMapSharedPt
             cached_route_.value().get()));
   }
 
-  filter_manager_.streamInfo().setRequestHeaders(*request_headers_);
+  filter_manager_.streamInfo().setRequestHeaders(request_headers_);
 
   const bool upgrade_rejected = filter_manager_.createFilterChain() == false;
 

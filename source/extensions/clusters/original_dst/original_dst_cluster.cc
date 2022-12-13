@@ -108,7 +108,7 @@ OriginalDstCluster::LoadBalancer::requestOverrideHost(LoadBalancerContext* conte
   if (!http_header_name_.has_value()) {
     return nullptr;
   }
-  const Http::HeaderMap* downstream_headers = context->downstreamHeaders();
+  const Http::HeaderMap* downstream_headers = context->downstreamHeaders().get();
   if (!downstream_headers) {
     return nullptr;
   }

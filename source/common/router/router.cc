@@ -372,7 +372,7 @@ void Filter::chargeUpstreamCode(Http::Code code,
 }
 
 Http::FilterHeadersStatus Filter::decodeHeaders(Http::RequestHeaderMap& headers, bool end_stream) {
-  downstream_headers_ = &headers;
+  downstream_headers_ = Http::RequestHeaderMapSharedPtr(&headers);
 
   // Extract debug configuration from filter state. This is used further along to determine whether
   // we should append cluster and host headers to the response, and whether to forward the request

@@ -668,7 +668,7 @@ public:
   /**
    * @param headers request headers.
    */
-  virtual void setRequestHeaders(const Http::RequestHeaderMap& headers) PURE;
+  virtual void setRequestHeaders(const Http::RequestHeaderMapSharedPtr& headers) PURE;
 
   /**
    * @return request headers.

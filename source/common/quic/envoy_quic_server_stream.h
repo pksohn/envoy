@@ -40,7 +40,8 @@ public:
   }
   void setDeferredLoggingHeadersAndTrailers(
       Http::DeferredLoggingHeadersAndTrailers headers_and_trailers) override {
-    stats_gatherer_->setDeferredLoggingHeadersAndTrailers(std::move(headers_and_trailers));
+    // stats_gatherer_->setDeferredLoggingHeadersAndTrailers(std::move(headers_and_trailers));
+    stats_gatherer_->setDeferredLoggingHeadersAndTrailers(headers_and_trailers);
   };
 
   // Http::Stream

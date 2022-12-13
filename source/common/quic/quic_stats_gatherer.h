@@ -41,9 +41,11 @@ public:
   // Set headers and trailers used for deferred logging.
   void setDeferredLoggingHeadersAndTrailers(
       Http::DeferredLoggingHeadersAndTrailers headers_and_trailers) {
+    // deferred_logging_headers_and_trailers_ =
+    //     absl::make_optional<Http::DeferredLoggingHeadersAndTrailers>(
+    //         std::move(headers_and_trailers));
     deferred_logging_headers_and_trailers_ =
-        absl::make_optional<Http::DeferredLoggingHeadersAndTrailers>(
-            std::move(headers_and_trailers));
+        absl::make_optional<Http::DeferredLoggingHeadersAndTrailers>(headers_and_trailers);
   }
   bool loggingDone() { return logging_done_; }
   uint64_t bytesOutstanding() { return bytes_outstanding_; }

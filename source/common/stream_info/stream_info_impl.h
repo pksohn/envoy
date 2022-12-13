@@ -251,11 +251,13 @@ struct StreamInfoImpl : public StreamInfo {
   const FilterStateSharedPtr& filterState() override { return filter_state_; }
   const FilterState& filterState() const override { return *filter_state_; }
 
-  void setRequestHeaders(const Http::RequestHeaderMap& headers) override {
-    request_headers_ = &headers;
+  void setRequestHeaders(const Http::RequestHeaderMapSharedPtr& headers) override {
+    request_headers_ = headers;
   }
 
-  const Http::RequestHeaderMap* getRequestHeaders() const override { return request_headers_; }
+  const Http::RequestHeaderMap* getRequestHeaders() const override {
+    return request_headers_.get();
+  }
 
   void setStreamIdProvider(StreamIdProviderSharedPtr provider) override {
     stream_id_provider_ = std::move(provider);
@@ -382,7 +384,7 @@ private:
   uint64_t bytes_received_{};
   uint64_t bytes_sent_{};
   const Network::ConnectionInfoProviderSharedPtr downstream_connection_info_provider_;
-  const Http::RequestHeaderMap* request_headers_{};
+  Http::RequestHeaderMapSharedPtr request_headers_;
   StreamIdProviderSharedPtr stream_id_provider_;
   absl::optional<DownstreamTiming> downstream_timing_;
   absl::optional<Upstream::ClusterInfoConstSharedPtr> upstream_cluster_info_;

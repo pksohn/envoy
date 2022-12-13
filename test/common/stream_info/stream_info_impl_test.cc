@@ -237,7 +237,7 @@ TEST_F(StreamInfoImplTest, SetFrom) {
 #ifdef __clang__
 #if defined(__linux__)
 #if defined(__has_feature) && !(__has_feature(thread_sanitizer))
-  ASSERT_TRUE(sizeof(s1) == 856 || sizeof(s1) == 872 || sizeof(s1) == 896)
+  ASSERT_TRUE(sizeof(s1) == 848)
       << "If adding fields to StreamInfoImpl, please check to see if you "
          "need to add them to setFromForRecreateStream! Current size "
       << sizeof(s1);
@@ -254,6 +254,78 @@ TEST_F(StreamInfoImplTest, SetFrom) {
   EXPECT_EQ(s1.protocol(), s2.protocol());
   EXPECT_EQ(s1.bytesReceived(), s2.bytesReceived());
   EXPECT_EQ(s1.getDownstreamBytesMeter(), s2.getDownstreamBytesMeter());
+}
+
+TEST_F(StreamInfoImplTest, AllPointersMustBeShared) {
+  std::shared_ptr<StreamInfoImpl> outer_stream_info;
+
+  {
+    StreamInfoImpl stream_info(Http::Protocol::Http2, test_time_.timeSystem(), nullptr);
+
+    stream_info.addBytesReceived(1);
+    stream_info.downstreamTiming().onLastDownstreamRxByteReceived(test_time_.timeSystem());
+
+#ifdef __clang__
+#if defined(__linux__)
+#if defined(__has_feature) && !(__has_feature(thread_sanitizer))
+    ASSERT_TRUE(sizeof(stream_info) == 848)
+        << "If adding pointer fields to StreamInfoImpl, please ensure they are shared and add them "
+           "to this test. Current size "
+        << sizeof(stream_info);
+#endif
+#endif
+#endif
+    std::shared_ptr<StreamInfoImpl> inner_stream_info =
+        std::make_shared<StreamInfoImpl>(stream_info);
+
+    // upstream_info_
+    std::shared_ptr<UpstreamInfoImpl> upstream_info = std::make_shared<UpstreamInfoImpl>();
+    inner_stream_info->setUpstreamInfo(upstream_info);
+    upstream_info->setUpstreamProtocol(Http::Protocol::Http3);
+
+    // request_headers_
+    std::shared_ptr<Http::TestRequestHeaderMapImpl> headers =
+        std::make_shared<Http::TestRequestHeaderMapImpl>();
+    headers->setProtocol("h3");
+    inner_stream_info->setRequestHeaders(headers);
+
+    // stream_id_provider_
+    std::shared_ptr<Envoy::StreamInfo::StreamIdProvider> stream_id_provider =
+        std::make_shared<Envoy::StreamInfo::StreamIdProviderImpl>("foo");
+    inner_stream_info->setStreamIdProvider(stream_id_provider);
+
+    // upstream_cluster_info_
+    Upstream::ClusterInfoConstSharedPtr cluster_info(new NiceMock<Upstream::MockClusterInfo>());
+    inner_stream_info->setUpstreamClusterInfo(cluster_info);
+
+    // upstream_bytes_meter_
+    std::shared_ptr<BytesMeter> upstream_bytes_meter = std::make_shared<BytesMeter>();
+    inner_stream_info->setUpstreamBytesMeter(upstream_bytes_meter);
+    upstream_bytes_meter->addHeaderBytesSent(100);
+
+    // downstream_bytes_meter_
+    std::shared_ptr<BytesMeter> downstream_bytes_meter = std::make_shared<BytesMeter>();
+    inner_stream_info->setDownstreamBytesMeter(downstream_bytes_meter);
+    downstream_bytes_meter->addHeaderBytesSent(200);
+
+    outer_stream_info = inner_stream_info;
+    EXPECT_EQ(outer_stream_info->upstreamInfo()->upstreamProtocol(), Http::Protocol::Http3);
+    EXPECT_EQ(outer_stream_info->getRequestHeaders()->getProtocolValue(), "h3");
+    EXPECT_EQ(outer_stream_info->getStreamIdProvider().value().get().toStringView().value(), "foo");
+    EXPECT_EQ(outer_stream_info->upstreamClusterInfo().value()->name(), "fake_cluster");
+    EXPECT_EQ(outer_stream_info->getUpstreamBytesMeter()->headerBytesSent(), 100);
+    EXPECT_EQ(outer_stream_info->getDownstreamBytesMeter()->headerBytesSent(), 200);
+  }
+
+  // Ensure that all fields can be accessed outside the scope in which they were created. This
+  // mimics the situation in which StreamInfo is accessed after its originating stream is closed
+  // (e.g. in the case of deferred logging via QuicStatsGatherer.)
+  EXPECT_EQ(outer_stream_info->upstreamInfo()->upstreamProtocol(), Http::Protocol::Http3);
+  EXPECT_EQ(outer_stream_info->getRequestHeaders()->getProtocolValue(), "h3");
+  EXPECT_EQ(outer_stream_info->getStreamIdProvider().value().get().toStringView().value(), "foo");
+  EXPECT_EQ(outer_stream_info->upstreamClusterInfo().value()->name(), "fake_cluster");
+  EXPECT_EQ(outer_stream_info->getUpstreamBytesMeter()->headerBytesSent(), 100);
+  EXPECT_EQ(outer_stream_info->getDownstreamBytesMeter()->headerBytesSent(), 200);
 }
 
 TEST_F(StreamInfoImplTest, DynamicMetadataTest) {
@@ -303,9 +375,10 @@ TEST_F(StreamInfoImplTest, RequestHeadersTest) {
   StreamInfoImpl stream_info(Http::Protocol::Http2, test_time_.timeSystem(), nullptr);
   EXPECT_FALSE(stream_info.getRequestHeaders());
 
-  Http::TestRequestHeaderMapImpl headers;
+  std::shared_ptr<Http::TestRequestHeaderMapImpl> headers =
+      std::make_shared<Http::TestRequestHeaderMapImpl>();
   stream_info.setRequestHeaders(headers);
-  EXPECT_EQ(&headers, stream_info.getRequestHeaders());
+  EXPECT_EQ(headers.get(), stream_info.getRequestHeaders());
 }
 
 TEST_F(StreamInfoImplTest, DefaultStreamIdProvider) {

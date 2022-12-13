@@ -202,7 +202,7 @@ void UpstreamRequest::cleanUp() {
 
   stream_info_.onRequestComplete();
   for (const auto& upstream_log : parent_.config().upstream_logs_) {
-    upstream_log->log(parent_.downstreamHeaders(), upstream_headers_.get(),
+    upstream_log->log(parent_.downstreamHeaders().get(), upstream_headers_.get(),
                       upstream_trailers_.get(), stream_info_);
   }
 
@@ -316,7 +316,7 @@ void UpstreamRequest::dumpState(std::ostream& os, int indent_level) const {
     const auto addressProvider = connection()->connectionInfoProviderSharedPtr();
     DUMP_DETAILS(addressProvider);
   }
-  const Http::RequestHeaderMap* request_headers = parent_.downstreamHeaders();
+  const Http::RequestHeaderMap* request_headers = parent_.downstreamHeaders().get();
   DUMP_DETAILS(request_headers);
   if (filter_manager_) {
     filter_manager_->dumpState(os, indent_level);
@@ -359,7 +359,7 @@ void UpstreamRequest::acceptHeadersFromRouter(bool end_stream) {
     return;
   }
 
-  auto* headers = parent_.downstreamHeaders();
+  auto* headers = parent_.downstreamHeaders().get();
 
   // Make sure that when we are forwarding CONNECT payload we do not do so until
   // the upstream has accepted the CONNECT request.
@@ -368,8 +368,8 @@ void UpstreamRequest::acceptHeadersFromRouter(bool end_stream) {
   }
 
   filter_manager_->requestHeadersInitialized();
-  filter_manager_->streamInfo().setRequestHeaders(*parent_.downstreamHeaders());
-  filter_manager_->decodeHeaders(*parent_.downstreamHeaders(), end_stream);
+  filter_manager_->streamInfo().setRequestHeaders(parent_.downstreamHeaders());
+  filter_manager_->decodeHeaders(*parent_.downstreamHeaders().get(), end_stream);
 }
 
 void UpstreamRequest::acceptDataFromRouterOld(Buffer::Instance& data, bool end_stream) {
@@ -682,14 +682,14 @@ void UpstreamRequest::onPoolReady(std::unique_ptr<GenericUpstream>&& upstream,
     parent_.callbacks()->activeSpan().injectContext(*parent_.downstreamHeaders(), host);
   }
 
-  stream_info_.setRequestHeaders(*parent_.downstreamHeaders());
+  stream_info_.setRequestHeaders(parent_.downstreamHeaders());
 
   for (auto* callback : upstream_callbacks_) {
     callback->onUpstreamConnectionEstablished();
     return;
   }
 
-  auto* headers = parent_.downstreamHeaders();
+  auto* headers = parent_.downstreamHeaders().get();
   calling_encode_headers_ = true;
   upstreamTiming().onFirstUpstreamTxByteSent(parent_.callbacks()->dispatcher().timeSource());
 

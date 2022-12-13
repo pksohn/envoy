@@ -342,7 +342,7 @@ public:
   virtual FilterConfig& config() PURE;
   virtual FilterUtility::TimeoutData timeout() PURE;
   virtual absl::optional<std::chrono::milliseconds> dynamicMaxStreamDuration() const PURE;
-  virtual Http::RequestHeaderMap* downstreamHeaders() PURE;
+  virtual Http::RequestHeaderMapSharedPtr downstreamHeaders() PURE;
   virtual Http::RequestTrailerMap* downstreamTrailers() PURE;
   virtual bool downstreamResponseStarted() const PURE;
   virtual bool downstreamEndStream() const PURE;
@@ -428,7 +428,9 @@ public:
   const Network::Connection* downstreamConnection() const override {
     return callbacks_->connection().ptr();
   }
-  const Http::RequestHeaderMap* downstreamHeaders() const override { return downstream_headers_; }
+  const Http::RequestHeaderMapSharedPtr downstreamHeaders() const override {
+    return downstream_headers_;
+  }
 
   bool shouldSelectAnotherHost(const Upstream::Host& host) override {
     // We only care about host selection when performing a retry, at which point we consult the
@@ -524,7 +526,7 @@ public:
   absl::optional<std::chrono::milliseconds> dynamicMaxStreamDuration() const override {
     return dynamic_max_stream_duration_;
   }
-  Http::RequestHeaderMap* downstreamHeaders() override { return downstream_headers_; }
+  Http::RequestHeaderMapSharedPtr downstreamHeaders() override { return downstream_headers_; }
   Http::RequestTrailerMap* downstreamTrailers() override { return downstream_trailers_; }
   bool downstreamResponseStarted() const override { return downstream_response_started_; }
   bool downstreamEndStream() const override { return downstream_end_stream_; }
@@ -630,7 +632,7 @@ private:
   UpstreamRequest* final_upstream_request_ = nullptr;
   bool grpc_request_{};
   bool exclude_http_code_stats_ = false;
-  Http::RequestHeaderMap* downstream_headers_{};
+  Http::RequestHeaderMapSharedPtr downstream_headers_;
   Http::RequestTrailerMap* downstream_trailers_{};
   MonotonicTime downstream_request_complete_time_;
   uint32_t retry_shadow_buffer_limit_{std::numeric_limits<uint32_t>::max()};

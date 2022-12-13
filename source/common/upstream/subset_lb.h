@@ -164,7 +164,7 @@ private:
     const Network::Connection* downstreamConnection() const override {
       return wrapped_->downstreamConnection();
     }
-    const Http::RequestHeaderMap* downstreamHeaders() const override {
+    const Http::RequestHeaderMapSharedPtr downstreamHeaders() const override {
       return wrapped_->downstreamHeaders();
     }
     const HealthyAndDegradedLoad& determinePriorityLoad(

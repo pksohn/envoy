@@ -218,7 +218,8 @@ private:
       if (responseTrailers()) {
         headers_and_trailers.response_trailer_map = response_trailers_;
       }
-      response_encoder_->setDeferredLoggingHeadersAndTrailers(std::move(headers_and_trailers));
+      // response_encoder_->setDeferredLoggingHeadersAndTrailers(std::move(headers_and_trailers));
+      response_encoder_->setDeferredLoggingHeadersAndTrailers(headers_and_trailers);
     }
 
     // ScopeTrackedObject
