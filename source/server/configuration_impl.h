@@ -95,7 +95,7 @@ public:
   static void
   buildUdpFilterChain(Network::UdpListenerFilterManager& filter_manager,
                       Network::UdpReadFilterCallbacks& callbacks,
-                      const std::vector<Network::UdpListenerFilterFactoryCb>& factories);
+                      const Filter::UdpListenerFilterFactoriesList& factories);
 };
 
 /**

@@ -64,9 +64,10 @@ public:
   /**
    * Static worker for createUdpListenerFilterFactoryList() that can be used directly in tests.
    */
-  static std::vector<Network::UdpListenerFilterFactoryCb> createUdpListenerFilterFactoryListImpl(
+  static Filter::UdpListenerFilterFactoriesList createUdpListenerFilterFactoryListImpl(
       const Protobuf::RepeatedPtrField<envoy::config::listener::v3::ListenerFilter>& filters,
-      Configuration::ListenerFactoryContext& context);
+      Configuration::ListenerFactoryContext& FactoryContextImpl,
+      Filter::UdpListenerFilterConfigProviderManagerImpl& config_provider_manager);
 
   static Network::ListenerFilterMatcherSharedPtr
   createListenerFilterMatcher(const envoy::config::listener::v3::ListenerFilter& listener_filter);
@@ -91,10 +92,11 @@ public:
     return createListenerFilterFactoryListImpl(filters, context,
                                                tcp_listener_config_provider_manager_);
   }
-  std::vector<Network::UdpListenerFilterFactoryCb> createUdpListenerFilterFactoryList(
+  Filter::UdpListenerFilterFactoriesList createUdpListenerFilterFactoryList(
       const Protobuf::RepeatedPtrField<envoy::config::listener::v3::ListenerFilter>& filters,
       Configuration::ListenerFactoryContext& context) override {
-    return createUdpListenerFilterFactoryListImpl(filters, context);
+    return createUdpListenerFilterFactoryListImpl(filters, context,
+                                                  udp_listener_config_provider_manager_);
   }
   Network::SocketSharedPtr createListenSocket(
       Network::Address::InstanceConstSharedPtr address, Network::Socket::Type socket_type,
@@ -114,6 +116,7 @@ private:
   uint64_t next_listener_tag_{1};
   Filter::NetworkFilterConfigProviderManagerImpl network_config_provider_manager_;
   Filter::TcpListenerFilterConfigProviderManagerImpl tcp_listener_config_provider_manager_;
+  Filter::UdpListenerFilterConfigProviderManagerImpl udp_listener_config_provider_manager_;
 };
 
 class ListenerImpl;

@@ -51,12 +51,24 @@ public:
       listener_filter->set_name(name);
 
       auto* discovery = listener_filter->mutable_config_discovery();
-      discovery->add_type_urls(
-          "type.googleapis.com/test.integration.filters.TestTcpListenerFilterConfig");
-      if (set_default_config) {
-        auto default_configuration = test::integration::filters::TestTcpListenerFilterConfig();
-        default_configuration.set_drain_bytes(default_drain_bytes_);
-        discovery->mutable_default_config()->PackFrom(default_configuration);
+      if (!is_udp_) {
+        addListenerFilterMatcher(listener_filter, matcher);
+        discovery->add_type_urls(
+            "type.googleapis.com/test.integration.filters.TestTcpListenerFilterConfig");
+        if (set_default_config) {
+          auto default_configuration = test::integration::filters::TestTcpListenerFilterConfig();
+          default_configuration.set_drain_bytes(default_drain_bytes_);
+          discovery->mutable_default_config()->PackFrom(default_configuration);
+        }
+      } else {
+        std::cout << "\nListenerExtensionDiscoveryIntegrationTest: Add dynamic UDP filter\n";
+        discovery->add_type_urls(
+            "type.googleapis.com/test.integration.filters.TestUdpListenerFilterConfig");
+        if (set_default_config) {
+          auto default_configuration = test::integration::filters::TestUdpListenerFilterConfig();
+          default_configuration.set_drain_bytes(default_drain_bytes_);
+          discovery->mutable_default_config()->PackFrom(default_configuration);
+        }
       }
 
       discovery->set_apply_default_config_without_warming(apply_without_warming);
@@ -68,7 +80,7 @@ public:
       if (rate_limit) {
         api_config_source->mutable_rate_limit_settings()->mutable_max_tokens()->set_value(10);
       }
-      addListenerFilterMatcher(listener_filter, matcher);
+
       auto* grpc_service = api_config_source->add_grpc_services();
       if (!second_connection) {
         setGrpcService(*grpc_service, std::string(EcdsClusterName),
@@ -119,16 +131,44 @@ public:
     defer_listener_finalization_ = true;
     setUpstreamCount(1);
 
+    if (is_udp_) {
+      std::cout << "\ninitialize: isudp\n";
+      FakeUpstreamConfig::UdpConfig config;
+      config.max_rx_datagram_size_ = absl::nullopt;
+      setUdpFakeUpstream(config);
+    }
+
     // Add a tcp_proxy network filter.
-    config_helper_.addConfigModifier([](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
+    config_helper_.addConfigModifier([this](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
       auto* listener = bootstrap.mutable_static_resources()->mutable_listeners(0);
-      auto* filter_chain = listener->add_filter_chains();
-      auto* filter = filter_chain->add_filters();
-      filter->set_name("envoy.filters.network.tcp_proxy");
-      envoy::extensions::filters::network::tcp_proxy::v3::TcpProxy config;
-      config.set_stat_prefix("tcp_stats");
-      config.set_cluster("cluster_0");
-      filter->mutable_typed_config()->PackFrom(config);
+      if (is_udp_) {
+      std::cout << "\ninitialize: add udp listener filter config\n";
+        listener->mutable_address()->mutable_socket_address()->set_protocol(
+            envoy::config::core::v3::SocketAddress::UDP);
+        config_helper_.addListenerFilter(R"EOF(
+name: udp_proxy
+typed_config:
+  '@type': type.googleapis.com/envoy.extensions.filters.udp.udp_proxy.v3.UdpProxyConfig
+  stat_prefix: foo
+  matcher:
+    on_no_match:
+      action:
+        name: route
+        typed_config:
+          '@type': type.googleapis.com/envoy.extensions.filters.udp.udp_proxy.v3.Route
+          cluster: cluster_0
+)EOF");
+
+        listener->mutable_listener_filters()->SwapElements(1, 0);
+      } else {
+        auto* filter_chain = listener->add_filter_chains();
+        auto* filter = filter_chain->add_filters();
+        filter->set_name("envoy.filters.network.tcp_proxy");
+        envoy::extensions::filters::network::tcp_proxy::v3::TcpProxy config;
+        config.set_stat_prefix("tcp_stats");
+        config.set_cluster("cluster_0");
+        filter->mutable_typed_config()->PackFrom(config);
+      }
     });
 
     addEcdsCluster(std::string(EcdsClusterName));
@@ -166,17 +206,21 @@ public:
 
   void waitForEcdsStream(FakeUpstream& upstream, FakeHttpConnectionPtr& connection,
                          FakeStreamPtr& stream) {
+    std::cout << "\nwaitEcdsStream wait for new connection\n";
     AssertionResult result = upstream.waitForHttpConnection(*dispatcher_, connection);
     ASSERT_TRUE(result);
+    std::cout << "\nwaitEcdsStream wait for new stream\n";
     result = connection->waitForNewStream(*dispatcher_, stream);
     ASSERT_TRUE(result);
     stream->startGrpcStream();
   }
 
   void waitXdsStream() {
+    std::cout << "\nwaitXdsStream\n";
     waitForEcdsStream(getEcdsFakeUpstream(), ecds_connection_, ecds_stream_);
     if (two_connections_) {
       // Wait for 2nd ECDS stream.
+    std::cout << "\nwaitXdsStream2\n";
       waitForEcdsStream(getEcds2FakeUpstream(), ecds2_connection_, ecds2_stream_);
     }
   }
@@ -195,9 +239,16 @@ public:
     envoy::service::discovery::v3::Resource resource;
     resource.set_name(name);
 
-    auto configuration = test::integration::filters::TestTcpListenerFilterConfig();
-    configuration.set_drain_bytes(drain_bytes);
-    typed_config.mutable_typed_config()->PackFrom(configuration);
+    if (!is_udp_) {
+      auto configuration = test::integration::filters::TestTcpListenerFilterConfig();
+      configuration.set_drain_bytes(drain_bytes);
+      typed_config.mutable_typed_config()->PackFrom(configuration);
+    } else {
+      auto configuration = test::integration::filters::TestUdpListenerFilterConfig();
+      configuration.set_drain_bytes(drain_bytes);
+      typed_config.mutable_typed_config()->PackFrom(configuration);
+    }
+
     resource.mutable_resource()->PackFrom(typed_config);
     if (ttl) {
       resource.mutable_ttl()->set_seconds(1);
@@ -226,6 +277,23 @@ public:
     const std::string expected_data = data_.substr(drain_bytes, std::string::npos);
     EXPECT_EQ(expected_data, received_data);
     tcp_client->close();
+  }
+
+  void sendUdpDataVerifyResults(uint32_t drain_bytes) {
+    test_server_->waitUntilListenersReady();
+    EXPECT_EQ(test_server_->server().initManager().state(), Init::Manager::State::Initialized);
+    const uint32_t port = lookupPort(port_name_);
+    const auto listener_address = Network::Utility::resolveUrl(
+        fmt::format("tcp://{}:{}", Network::Test::getLoopbackAddressUrlString(version_), port));
+
+    Network::Test::UdpSyncPeer client(version_, Network::DEFAULT_UDP_MAX_DATAGRAM_SIZE);
+    std::string request = data_;
+    client.write(request, *listener_address);
+
+    Network::UdpRecvData request_datagram;
+    ASSERT_TRUE(fake_upstreams_[0]->waitForUdpDatagram(request_datagram));
+    const std::string expected_data = data_.substr(drain_bytes, std::string::npos);
+    EXPECT_EQ(expected_data, request_datagram.buffer_->toString());
   }
 
   // Verify ECDS config dump data.
@@ -266,6 +334,7 @@ public:
   const std::string data_;
   const std::string port_name_;
   bool two_connections_{false};
+  bool is_udp_{false};
 
   FakeUpstream& getEcdsFakeUpstream() const { return *fake_upstreams_[1]; }
   FakeUpstream& getEcds2FakeUpstream() const { return *fake_upstreams_[2]; }
@@ -298,6 +367,36 @@ TEST_P(ListenerExtensionDiscoveryIntegrationTest, BasicSuccess) {
   test_server_->waitForCounterGe(
       "extension_config_discovery.tcp_listener_filter." + filter_name_ + ".config_reload", 2);
   sendDataVerifyResults(3);
+}
+
+
+TEST_P(ListenerExtensionDiscoveryIntegrationTest, BasicSuccessUdp) {
+  is_udp_ = true;
+  on_server_init_function_ = [&]() { waitXdsStream(); };
+  addDynamicFilter(filter_name_, false);
+
+  std::cout << "\nBasicSuccessUdp: before initialize\n";
+  initialize();
+  std::cout << "\nBasicSuccessUdp: after initialize\n";
+
+  EXPECT_EQ(test_server_->server().initManager().state(), Init::Manager::State::Initializing);
+
+  std::cout << "\nBasicSuccessUdp: before send xds 5\n";
+  // Send 1st config update to have listener filter drain 5 bytes of data.
+  sendXdsResponse(filter_name_, "1", 5);
+  test_server_->waitForCounterGe(
+      "extension_config_discovery.udp_listener_filter." + filter_name_ + ".config_reload", 1);
+
+  std::cout << "\nBasicSuccessUdp: verify xds 5\n";
+  sendUdpDataVerifyResults(5);
+   // Send 2nd config update to have listener filter drain 7 bytes of data.
+  std::cout << "\nBasicSuccessUdp: before send xds 7\n";
+  sendXdsResponse(filter_name_, "1", 7);
+  test_server_->waitForCounterGe(
+      "extension_config_discovery.udp_listener_filter." + filter_name_ + ".config_reload", 2);
+
+  std::cout << "\nBasicSuccessUdp: verify xds 7\n";
+  sendUdpDataVerifyResults(7);
 }
 
 TEST_P(ListenerExtensionDiscoveryIntegrationTest, BasicSuccessWithAnyMatcher) {

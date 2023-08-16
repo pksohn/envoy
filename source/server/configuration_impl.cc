@@ -60,9 +60,19 @@ bool FilterChainUtility::buildFilterChain(Network::ListenerFilterManager& filter
 
 void FilterChainUtility::buildUdpFilterChain(
     Network::UdpListenerFilterManager& filter_manager, Network::UdpReadFilterCallbacks& callbacks,
-    const std::vector<Network::UdpListenerFilterFactoryCb>& factories) {
-  for (const Network::UdpListenerFilterFactoryCb& factory : factories) {
-    factory(filter_manager, callbacks);
+    const Filter::UdpListenerFilterFactoriesList& factories) {
+  for (const auto& filter_config_provider : factories) {
+    auto config = filter_config_provider->config();
+    if (config.has_value()) {
+      auto config_value = config.value();
+      config_value(filter_manager, callbacks);
+      continue;
+    }
+    // if (!config.has_value()) {
+    //   return false;
+    // }
+    // auto config_value = config.value();
+    // config_value(filter_manager);
   }
 }
 

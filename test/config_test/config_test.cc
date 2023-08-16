@@ -139,16 +139,16 @@ public:
                 Server::Configuration::ListenerFactoryContext& context)
                 -> Filter::ListenerFilterFactoriesList {
               return Server::ProdListenerComponentFactory::createListenerFilterFactoryListImpl(
-                  filters, context, *component_factory_.getTcpListenerConfigProviderManager());
+                  filters, context, tcp_listener_config_provider_manager_);
             }));
     ON_CALL(component_factory_, createUdpListenerFilterFactoryList(_, _))
         .WillByDefault(Invoke(
             [&](const Protobuf::RepeatedPtrField<envoy::config::listener::v3::ListenerFilter>&
                     filters,
                 Server::Configuration::ListenerFactoryContext& context)
-                -> std::vector<Network::UdpListenerFilterFactoryCb> {
+                -> Filter::UdpListenerFilterFactoriesList {
               return Server::ProdListenerComponentFactory::createUdpListenerFilterFactoryListImpl(
-                  filters, context);
+                  filters, context, udp_listener_config_provider_manager_);
             }));
     ON_CALL(server_, serverFactoryContext()).WillByDefault(ReturnRef(server_factory_context_));
 
@@ -183,6 +183,7 @@ public:
   NiceMock<Filesystem::MockInstance> file_system_;
   Filter::NetworkFilterConfigProviderManagerImpl network_config_provider_manager_;
   Filter::TcpListenerFilterConfigProviderManagerImpl tcp_listener_config_provider_manager_;
+  Filter::UdpListenerFilterConfigProviderManagerImpl udp_listener_config_provider_manager_;
 };
 
 void testMerge() {

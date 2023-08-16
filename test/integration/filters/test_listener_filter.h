@@ -63,16 +63,22 @@ private:
  */
 class TestUdpListenerFilter : public Network::UdpListenerReadFilter {
 public:
-  TestUdpListenerFilter(Network::UdpReadFilterCallbacks& callbacks)
-      : UdpListenerReadFilter(callbacks) {}
+  TestUdpListenerFilter(Network::UdpReadFilterCallbacks& callbacks, const uint32_t drain_bytes)
+      : UdpListenerReadFilter(callbacks), drain_bytes_(drain_bytes) {}
 
   // Network::UdpListenerReadFilter callbacks
-  Network::FilterStatus onData(Network::UdpRecvData&) override {
+  Network::FilterStatus onData(Network::UdpRecvData& data) override {
+    if (drain_bytes_ && drain_bytes_ <= data.buffer_->length()) {
+      data.buffer_->drain(drain_bytes_);
+    }
     return Network::FilterStatus::Continue;
   }
   Network::FilterStatus onReceiveError(Api::IoError::IoErrorCode) override {
     return Network::FilterStatus::Continue;
   }
+
+private:
+  const uint32_t drain_bytes_;
 };
 
 } // namespace Envoy
